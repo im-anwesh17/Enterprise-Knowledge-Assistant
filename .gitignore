@@ -1,0 +1,29 @@
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Project specific
+backend/uploaded_docs/
+backend/chroma_db/
+backend/alembic.ini
+
+# Node modules
+node_modules/
+dist/
+build/
