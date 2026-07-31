@@ -26,7 +26,12 @@ export const executeNLQuery = async (query: string) => {
   return response.data;
 };
 
-// Document Service (For Phase 5)
+// Document Service
+export const getDocuments = async () => {
+  const response = await api.get('/documents/');
+  return response.data;
+};
+
 export const uploadDocument = async (file: File) => {
   const formData = new FormData();
   formData.append('file', file);
@@ -35,6 +40,7 @@ export const uploadDocument = async (file: File) => {
   });
   return response.data;
 };
+
 
 // Chat Service
 export const getChatSessions = async () => {

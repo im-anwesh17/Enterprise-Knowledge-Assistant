@@ -2,7 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Routes, Route, Link } from 'react-router-dom';
 import DashboardPage from './pages/DashboardPage';
 import ChatPage from './pages/ChatPage';
+import DocumentsPage from './pages/DocumentsPage';
 import { Sun, Moon, Database, FileText, MessageSquare } from 'lucide-react';
+
+
 
 
 function App() {
@@ -55,8 +58,9 @@ function App() {
 
           <Route path="/" element={<DashboardPage />} />
           <Route path="/chat" element={<ChatPage />} />
-          <Route path="/documents" element={<div className="p-10 text-2xl">Document Upload Coming Soon...</div>} />
+          <Route path="/documents" element={<DocumentsPage />} />
         </Routes>
+
 
       </main>
     </div>
