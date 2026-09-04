@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.prompts import PromptTemplate, ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 
 from app.core.config import settings
 from app.schemas.search import Citation
@@ -50,7 +50,10 @@ def conversational_rag(db: Session, user_id: int, session_id: int, query: str) -
         elif msg.role == "assistant":
             langchain_history.append(AIMessage(content=msg.content))
 
-    retriever = vector_store.as_retriever(search_kwargs={"k": 5, "filter": {"user_id": user_id}})
+    retriever = vector_store.as_retriever(
+        search_type="similarity_score_threshold",
+        search_kwargs={"k": 5, "score_threshold": 0.75, "filter": {"user_id": user_id}},
+    )
     retrieved_docs = retriever.invoke(query)
     
     context_text = ""
