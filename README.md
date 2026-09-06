@@ -11,7 +11,7 @@ An enterprise-grade, conversational AI assistant designed to unify internal docu
 
 ## 🌟 Features
 
-- **Conversational RAG**: Upload PDF documents and query them contextually. The AI maintains session memory and cites the exact source document and page number to prevent hallucination.
+- **Conversational RAG**: Upload PDF documents and query them contextually. The AI maintains session memory and cites only the exact source documents it drew on to write the answer.
 - **Safe Text-to-SQL Analytics**: Ask natural language questions about business data (e.g., *"What is the total revenue by region?"*). The system translates this to PostgreSQL, validates the Abstract Syntax Tree (AST) to prevent destructive queries (e.g., `DROP`), executes the query, and generates an executive summary.
 - **Dynamic Visualization**: The React frontend dynamically binds unpredictable SQL JSON output to Recharts, rendering beautiful bar charts, line charts, and KPI cards on the fly.
 - **Stateless AI Architecture**: Chat memory is persisted in PostgreSQL rather than server RAM, allowing for horizontal scalability across multiple backend nodes.
@@ -53,7 +53,8 @@ graph TD
 **Backend**
 - Python 3.10+, FastAPI, Uvicorn
 - SQLAlchemy, Alembic (Migrations)
-- LangChain, OpenAI, PyPDF
+- LangChain, LangChain-Chroma, OpenAI, PyPDF
+- tiktoken (Token-aware chunking)
 - sqlparse (Security)
 
 **Database**
@@ -115,6 +116,9 @@ npm run dev
 │   │   ├── repositories/     # Generic Repository Pattern (CRUDBase)
 │   │   ├── schemas/          # Pydantic validation schemas
 │   │   └── services/         # Core AI Business Logic (RAG, Text-to-SQL)
+│   ├── tests/
+│   │   ├── test_rag_integrity.py   # RAG pipeline integrity & isolation tests
+│   │   └── ...
 │   ├── Dockerfile
 │   └── requirements.txt
 ├── frontend/
@@ -136,6 +140,53 @@ npm run dev
 2. **Stateless JWT**: Sessions are managed via stateless JSON Web Tokens.
 3. **AST SQL Validation**: Generated SQL is converted to an Abstract Syntax Tree using `sqlparse`. The tree is walked to ensure no `DROP`, `DELETE`, `UPDATE`, or `INSERT` tokens exist before execution.
 4. **Vector Isolation**: ChromaDB queries strictly inject `{"user_id": current_user.id}` into the `where` filter to prevent cross-tenant data spillage.
+5. **Ingestion Validation**: `process_and_index_document` validates `user_id`, `document_id`, and `filename` at entry — malformed call-sites are rejected with `ValueError` before any data reaches ChromaDB.
+
+---
+
+## 🧠 RAG Pipeline — Recent Improvements
+
+The following gaps in the RAG pipeline were identified and resolved:
+
+### 1. Similarity Score Threshold
+Retrievers now use `search_type="similarity_score_threshold"` with `score_threshold=0.75`. Queries with no meaningful match return zero chunks, so the LLM's prompt-level abstention is no longer the only line of defence against off-topic queries.
+
+```python
+retriever = vector_store.as_retriever(
+    search_type="similarity_score_threshold",
+    search_kwargs={"k": 5, "score_threshold": 0.75, "filter": {"user_id": user_id}}
+)
+```
+
+### 2. Accurate Citations (Structured Output)
+Citations now reflect only the documents the model actually drew on. A second LLM call using `with_structured_output` extracts which `document_id`s were cited in the answer; the citations list is filtered to that set.
+
+### 3. Token-Aware Chunking
+`RecursiveCharacterTextSplitter` now uses a `tiktoken` (`cl100k_base`) length function so `chunk_size=1000` means ≈1 000 tokens — matching LLM context window constraints rather than raw character counts.
+
+```python
+import tiktoken
+enc = tiktoken.get_encoding("cl100k_base")
+text_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=1000,
+    chunk_overlap=150,
+    length_function=lambda text: len(enc.encode(text)),
+)
+```
+
+### 4. Metadata Validation at Ingestion
+Explicit `isinstance` / positive-integer guards on `user_id`, `document_id`, and `filename` at the top of `process_and_index_document` ensure malformed call-sites fail fast before touching ChromaDB.
+
+### 5. Deduplication & Document Lifecycle
+- **Content-hash check** (SHA-256): re-uploading an identical document is detected early and skipped — no duplicate chunks are created.
+- **Stale chunk replacement**: re-uploading a modified document automatically deletes old chunks for that `document_id` before indexing the new content, preventing conflicting versions from coexisting in the vector store.
+
+### Running the RAG Integrity Tests
+```bash
+cd backend
+pytest tests/test_rag_integrity.py -v
+```
+Covers: metadata validation, cross-tenant isolation, deduplication, document lifecycle, and score-threshold retriever configuration (11 tests).
 
 ---
 
